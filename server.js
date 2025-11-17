@@ -1,32 +1,41 @@
 const express = require("express");
 const {Server} = require("socket.io");
 const cors = require("cors");
+const cookieParser = require("cookie-parser");
 const { connectToMongoDB } = require("./config/database.js");
-const chatRouter = require("./routes/chatRoute.js");
-const messageModel = require("./model/messageModel.js");
+const {chatRouter, authRouter, dashboardRouter, messageRouter, fileUploadRouter } = require("./routes/index.js");
+const {handleDisconnect, handleJoinChat, handleSendMessage, handleDeleteMessage, handleUpdateMessage} = require("./utils/socketHandlers.js");
 const app = express();
 const port = 4000;
 
-const whitelist = ["http://localhost:3000"]
+const allowedOrigins = ["http://localhost:5173"];
+
 const corsOptions = {
-  origin: "*"
-  // function (origin, callback) {
-  //   if (whitelist.indexOf(origin) !== -1) {
-  //     callback(null, true)
-  //   } else {
-  //     callback(new Error('Not allowed by CORS'))
-  //   }
-  // }
-}
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, origin); // allow request
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  allowedHeaders: ['Content-Type', 'Authorization'],
+};
+
 
 
 connectToMongoDB();
-app.use(express.json());
-app.use(express.urlencoded({extended: true}))
-
 app.use(cors(corsOptions));
+app.use(cookieParser());
+app.use(express.json());
+app.use(express.urlencoded({extended: true}));
 
-app.use("/api/v1", chatRouter);
+app.use("/api/v1/chat", chatRouter);
+app.use("/api/v1/auth", authRouter);
+app.use("/api/v1", dashboardRouter);
+app.use("/api/v1/message", messageRouter);
+app.use("/api/v1/", fileUploadRouter);   
+app.use("/api/v1/uploads", express.static("uploads"));
 
 const expressServer = app.listen(port, () => {
     console.log(`Listening from port: ${port}`)
@@ -46,26 +55,30 @@ io.on("connection", (socket) => {
 
   // Join a specific chat room
   socket.on("join_chat", (chatId) => {
-    socket.join(chatId);
-    console.log(`User ${socket.id} joined chat ${chatId}`);
+    handleJoinChat(socket, chatId);
   });
 
   // Handle new messages
   socket.on("send_message", async (data) => {
-    const { chatId, senderId, text } = data;
+    await handleSendMessage(socket, io, data);
+  });
 
-    // Save to DB
-    const newMessage = await messageModel.create({
-      chatId,
-      senderId,
-      text
+     socket.on('update_message', (data) => {
+      handleUpdateMessage(socket, io, data);
     });
 
-    // Emit to everyone in that chat room
-    io.to(chatId).emit("new_message", newMessage);
-  });
+    // Handle deleting a message
+    socket.on('delete_message', (data) => {
+      handleDeleteMessage(socket, io, data);
+    });
 
+  // Handle disconnection
   socket.on("disconnect", () => {
-    console.log("User disconnected:", socket.id);
+    handleDisconnect(socket);
   });
+});
+
+// Error handling for socket.io
+io.engine.on("connection_error", (err) => {
+  console.error("Socket.io connection error:", err);
 });

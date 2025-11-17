@@ -1,11 +1,13 @@
 const {Router} = require("express");
-const { createChatThreads, filterChatByThreadName, leaveChatThread, deleteChatThread } = require("../controllers/chatThreadController");
+const { createChatThreads, filterChatByThreadName, leaveChatThread, deleteChatThread, filterChatByUsers, filterChatById } = require("../controllers/chatThreadController");
 
 const chatRouter = Router();
 
-chatRouter.post("/chat/create", createChatThreads);
-chatRouter.get("/chat/filter", filterChatByThreadName);
-chatRouter.put("/chat/leave", leaveChatThread);
-chatRouter,delete("/chat/delete", deleteChatThread);
+chatRouter.post("/create", createChatThreads);
+chatRouter.get("/all", filterChatByUsers)
+chatRouter.get("/:chatId", filterChatById)
+chatRouter.get("/filter", filterChatByThreadName);
+chatRouter.put("/leave", leaveChatThread);
+chatRouter.delete("/delete", deleteChatThread);
 
 module.exports = chatRouter
